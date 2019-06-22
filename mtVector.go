@@ -11,7 +11,7 @@ const (
 	EPS = 0.00001
 )
 
-var InfinitePoint = Vector{-100000000, -100000000, -100000000}
+var InfinitePoint = Vector{-100000000, -100000000}
 
 // Because of laziness, a Vector could also just be a point. Depending on context.
 type Vector struct {
@@ -19,7 +19,7 @@ type Vector struct {
 	// Potentially changing to float128 --> https://gist.github.com/grd/4050062
 	// Or math/big --> https://golang.org/pkg/math/big/
 
-	X, Y, Z float64
+	X, Y float64
 }
 
 type Edge struct {
@@ -31,7 +31,7 @@ type Edge struct {
 type PointList []Vector
 
 func (v Vector) String() string {
-	return fmt.Sprintf("{x: %.1f, y: %.1f, z: %.1f}", v.X, v.Y, v.Z)
+	return fmt.Sprintf("{x: %.1f, y: %.1f}", v.X, v.Y)
 }
 
 // By is the type of a "less" function that defines the ordering of its Planet arguments.
@@ -101,40 +101,36 @@ func (e Edge) Copy() Edge {
 
 func Equal(v1, v2 Vector) bool {
 	return math.Abs(v1.X-v2.X) <= EPS &&
-		math.Abs(v1.Y-v2.Y) <= EPS &&
-		math.Abs(v1.Z-v2.Z) <= EPS
+		math.Abs(v1.Y-v2.Y) <= EPS
 }
 
 func Add(v1, v2 Vector) Vector {
-	return Vector{X: v1.X + v2.X, Y: v1.Y + v2.Y, Z: v1.Z + v2.Z}
+	return Vector{X: v1.X + v2.X, Y: v1.Y + v2.Y}
 }
 func Mult(v1 Vector, s float64) Vector {
-	return Vector{X: v1.X * s, Y: v1.Y * s, Z: v1.Z * s}
+	return Vector{X: v1.X * s, Y: v1.Y * s}
 }
 func Sub(v1, v2 Vector) Vector {
-	return Vector{X: v1.X - v2.X, Y: v1.Y - v2.Y, Z: v1.Z - v2.Z}
+	return Vector{X: v1.X - v2.X, Y: v1.Y - v2.Y}
 }
 
 func (v Vector) Copy() Vector {
-	return Vector{X: v.X, Y: v.Y, Z: v.Z}
+	return Vector{X: v.X, Y: v.Y}
 }
 
 func (v *Vector) Add(v1 Vector) {
 	v.X += v1.X
 	v.Y += v1.Y
-	v.Z += v1.Z
 }
 
 func (v *Vector) Sub(v1 Vector) {
 	v.X -= v1.X
 	v.Y -= v1.Y
-	v.Z -= v1.Z
 }
 
 func (v *Vector) Mult(s float64) {
 	v.X *= s
 	v.Y *= s
-	v.Z *= s
 }
 
 func (v *Vector) Div(s float64) {
@@ -144,7 +140,6 @@ func (v *Vector) Div(s float64) {
 	}
 	v.X /= s
 	v.Y /= s
-	v.Z /= s
 }
 
 // Calculates v2 - v1.
@@ -152,29 +147,36 @@ func Div(v1 Vector, s float64) Vector {
 	return Vector{
 		X: v1.X / s,
 		Y: v1.Y / s,
-		Z: v1.Z / s,
 	}
+}
+
+func LengthSquared(v Vector) float64 {
+	return v.X*v.X + v.Y*v.Y
 }
 
 func Length(v Vector) float64 {
-	return math.Sqrt(v.X*v.X + v.Y*v.Y + v.Z*v.Z)
+	return math.Sqrt(v.X*v.X + v.Y*v.Y)
 }
 
 func (v *Vector) Length() float64 {
-	return math.Sqrt(v.X*v.X + v.Y*v.Y + v.Z*v.Z)
+	return math.Sqrt(v.X*v.X + v.Y*v.Y)
+}
+
+func Perpendicular(v1 Vector) Vector {
+	return Vector{v1.Y, -v1.X}
 }
 
 // Calculates the cross product: v1 x v2
-func Cross(v1, v2 Vector) Vector {
-	return Vector{
-		X: v1.Y*v2.Z - v1.Z*v2.Y,
-		Y: v1.Z*v2.X - v1.X*v2.Z,
-		Z: v1.X*v2.Y - v1.Y*v2.X,
-	}
-}
+//func Cross(v1, v2 Vector) Vector {
+//	return Vector{
+//		X: v1.Y*v2.Z - v1.Z*v2.Y,
+//		Y: v1.Z*v2.X - v1.X*v2.Z,
+//		Z: v1.X*v2.Y - v1.Y*v2.X,
+//	}
+//}
 
 func Dot(v1, v2 Vector) float64 {
-	return v1.X*v2.X + v1.Y*v2.Y + v1.Z*v2.Z
+	return v1.X*v2.X + v1.Y*v2.Y
 }
 
 func Normalize(v Vector) Vector {
@@ -186,8 +188,32 @@ func (v *Vector) Normalize() {
 	v.Div(v.Length())
 }
 
+// Absolute error <= 6.7e-5
+func fastAcos(x float64) float64 {
+	negate := 0.0
+	if x < 0.0 {
+		negate = 1.0
+	}
+	x = math.Abs(x)
+	
+	ret := -0.0187293
+	ret = ret * x
+	ret = ret + 0.0742610
+	ret = ret * x
+	ret = ret - 0.2121144
+	ret = ret * x
+	ret = ret + 1.5707288
+	ret = ret * math.Sqrt(1.0-x)
+	ret = ret - 2.0 * negate * ret
+	return negate * 3.14159265358979 + ret
+}
+
+func AngleRad(v1, v2 Vector) float64 {
+	return fastAcos(Dot(v1, v2) / (v1.Length() * v2.Length()))
+}
+
 func Angle(v1, v2 Vector) float64 {
-	return RadToDeg(math.Acos(Dot(v1, v2) / (v1.Length() * v2.Length())))
+	return RadToDeg(fastAcos(Dot(v1, v2) / (v1.Length() * v2.Length())))
 }
 
 func DegToRad(f float64) float64 {
@@ -221,7 +247,6 @@ func MiddlePoint(p1, p2 Vector) Vector {
 	return Vector{
 		X: p1.X + d.X/2.0,
 		Y: p1.Y + d.Y/2.0,
-		Z: p1.Z + d.Z/2.0,
 	}
 }
 
@@ -229,7 +254,8 @@ func MiddlePoint(p1, p2 Vector) Vector {
 func PerpendicularBisector(p1, p2 Vector) Edge {
 	return Edge{
 		Pos: MiddlePoint(p1, p2),
-		Dir: Cross(Sub(p1, p2), Vector{0, 0, 1}),
+		//Dir: Cross(Sub(p1, p2), Vector{0, 0, 1}),
+		Dir: Perpendicular(Sub(p1, p2)),
 	}
 }
 
